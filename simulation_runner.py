@@ -14,14 +14,20 @@ def pois_ll(X, y, beta):
     ll = np.dot(Xb,y) - np.sum(np.exp(Xb))
     return ll
 
+def log_0(y):
+    with np.errstate(divide='ignore'):
+        res = np.log(y)
+    res[np.isneginf(res)]=0
+    return res    
+
 def pois_KL(X, y, beta, theta = None):
     Xb = np.dot(X,beta)
     if theta is None:
-        rel = y
+        kl_1 = np.dot(y, log_0(y)-Xb)
+        kl_2 = np.sum(y - np.exp(Xb))
     else:
-        rel = theta
-    kl_1 = np.dot(np.exp(rel),rel-Xb)
-    kl_2 = np.sum(np.exp(rel) - np.exp(Xb))
+        kl_1 = np.dot(np.exp(theta), theta - Xb)
+        kl_2 = np.sum(np.exp(theta) - np.exp(Xb))
     KL = kl_1-kl_2
     return KL
 
@@ -175,7 +181,7 @@ def prox(grad, beta, L, pen_vec):
 
 def FISTA(X, y, pen_vec, 
           type: ['poisson', 'nb'],
-          iterations = 1000, is_ordered = True
+          iterations = 25, is_ordered = True
           ,alpha = None
           ):
     """
@@ -232,6 +238,36 @@ def FISTA(X, y, pen_vec,
 #####################
 # Simulation_runner #
 #####################
+
+
+###############################
+# train and simulation runner #
+###############################
+
+def main_runner(# runner parameters
+                d, d0
+                , rho
+                , reg_type: ['poisson','nb']
+                # matrix simulator parameter
+               , sim_num = 1
+               # repetitions parameter
+               , reps = 13 ):
+    results_dict = {(d,d0,rho):[]}
+    for i in range(reps):
+        print('{} round'.format(i))
+        X, y, theta = matrix_simulator(d, d0
+                         , rho
+                         , beta_set = [0.5, -0.5, 0.6, -0.6]
+                         , n = 300
+                         , sim_num = 1)
+        print('running')
+        results_dict[(d,d0,rho)].append(runner(X, y, theta, reg_type))
+    return results_dict
+        
+
+###########################
+# Main Training Function #
+###########################
 
 def runner(X, y, theta
            , reg_type: ['poisson','nb']
@@ -478,9 +514,10 @@ def matrix_simulator(d, d0
     X = X/norm(X, axis = 0)
     
     beta = beta_creator(d, d0, beta_set)
-    theta = np.exp(np.dot(X,beta))
+    theta = np.dot(X,beta)
+    Lambda = np.exp(theta) # This is Lambda, not theta
 #     y = poisson.rvs(theta) 
-    y = poisson(theta)
+    y = poisson(Lambda)
     return X, y, theta
     
 def cov_creator(d, rho):
